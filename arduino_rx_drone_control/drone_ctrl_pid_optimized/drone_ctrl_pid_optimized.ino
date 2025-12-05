@@ -8,50 +8,60 @@
 #include <Wire.h>
 #include <MadgwickAHRS.h>
 
-Servo esc1; // D3 - Back left
-Servo esc2; // D5 - Front left
-Servo esc3; // D9 - Back right
-Servo esc4; // D10 - Front right
+Servo esc1;  // D3 - Back left
+Servo esc2;  // D5 - Front left
+Servo esc3;  // D9 - Back right
+Servo esc4;  // D10 - Front right
 
 #define MPU6050_ADDR 0x68
 
-#if defined (__AVR_ATmega32U4__)
-  #define RFM95_CS 8
-  #define RFM95_INT 7
-  #define RFM95_RST 4
+#if defined(__AVR_ATmega32U4__)
+#define RFM95_CS 8
+#define RFM95_INT 7
+#define RFM95_RST 4
 #elif defined(ADAFRUIT_FEATHER_M0) || defined(ADAFRUIT_FEATHER_M0_EXPRESS) || defined(ARDUINO_SAMD_FEATHER_M0)
-  #define RFM95_CS 8
-  #define RFM95_INT 3
-  #define RFM95_RST 4
+#define RFM95_CS 8
+#define RFM95_INT 3
+#define RFM95_RST 4
 #elif defined(ARDUINO_ADAFRUIT_FEATHER_RP2040_RFM)
-  #define RFM95_CS 16
-  #define RFM95_INT 21
-  #define RFM95_RST 17
-#elif defined (__AVR_ATmega328P__)
-  #define RFM95_CS 4
-  #define RFM95_INT 2
-  #define RFM95_RST 6
+#define RFM95_CS 16
+#define RFM95_INT 21
+#define RFM95_RST 17
+#elif defined(__AVR_ATmega328P__)
+#define RFM95_CS 4
+#define RFM95_INT 2
+#define RFM95_RST 6
 #elif defined(ESP8266)
-  #define RFM95_CS 2
-  #define RFM95_INT 15
-  #define RFM95_RST 16
+#define RFM95_CS 2
+#define RFM95_INT 15
+#define RFM95_RST 16
 #elif defined(ARDUINO_ADAFRUIT_FEATHER_ESP32S2) || defined(ARDUINO_NRF52840_FEATHER) || defined(ARDUINO_NRF52840_FEATHER_SENSE)
-  #define RFM95_CS 10
-  #define RFM95_INT 9
-  #define RFM95_RST 11
+#define RFM95_CS 10
+#define RFM95_INT 9
+#define RFM95_RST 11
 #elif defined(ESP32)
-  #define RFM95_CS 33
-  #define RFM95_INT 27
-  #define RFM95_RST 13
+#define RFM95_CS 33
+#define RFM95_INT 27
+#define RFM95_RST 13
 #elif defined(ARDUINO_NRF52832_FEATHER)
-  #define RFM95_CS 11
-  #define RFM95_INT 31
-  #define RFM95_RST 7
+#define RFM95_CS 11
+#define RFM95_INT 31
+#define RFM95_RST 7
 #endif
 
 #define RF95_FREQ 433.0
 
-RH_RF95 rf95(RFM95_CS, RFM95_INT);
+class MyRF95 : public RH_RF95 {
+public:
+  MyRF95(uint8_t slaveSelectPin, uint8_t interruptPin = RH_INVALID_PIN, RHGenericSPI& spi = hardware_spi)
+    : RH_RF95(slaveSelectPin, interruptPin, spi) {}
+
+  void poll() {
+    handleInterrupt();
+  }
+};
+
+MyRF95 rf95(RFM95_CS, RH_INVALID_PIN);
 Madgwick filter;
 
 float rollDeg = 0.0f;
@@ -64,7 +74,7 @@ float gyroBiasZ = 0.0f;
 
 float lastGx_dps = 0.0f;
 float lastGy_dps = 0.0f;
-float lastGz_dps = 0.0f;
+float lastGz_dps = 0.0f;  // for yaw
 
 float targetPitch = 0.0;
 float targetRoll = 0.0;
@@ -79,7 +89,7 @@ float constrainf(float x, float a, float b) {
   return x;
 }
 
-int maxThrottle = 1500;
+int maxThrottle = 1400;
 
 inline int clampUs(int us) {
   if (us < 1000) return 1000;
@@ -200,21 +210,21 @@ void mpuWrite(uint8_t reg, uint8_t val) {
 
 void mpuInit() {
   // Wake up
-  mpuWrite(0x6B, 0x00);       // PWR_MGMT_1: clear sleep
+  mpuWrite(0x6B, 0x00);  // PWR_MGMT_1: clear sleep
   delay(100);
 
   // Set digital low-pass filter: DLPF_CFG = 3
   // Gyro: ~42 Hz, Accel: ~44 Hz, internal sample rate 1 kHz
-  mpuWrite(0x1A, 0x03);       // CONFIG
+  mpuWrite(0x1A, 0x03);  // CONFIG
 
   // Sample rate: 1 kHz / (1 + 3) = 250 Hz
-  mpuWrite(0x19, 0x03);       // SMPLRT_DIV
+  mpuWrite(0x19, 0x03);  // SMPLRT_DIV
 
-  // Gyro +-250 dps
-  mpuWrite(0x1B, 0x00);       // GYRO_CONFIG
+  // Gyro ±250 dps (already what you had)
+  mpuWrite(0x1B, 0x00);  // GYRO_CONFIG
 
-  // Accel +-2
-  mpuWrite(0x1C, 0x00);       // ACCEL_CONFIG
+  // Accel ±2 g (already what you had)
+  mpuWrite(0x1C, 0x00);  // ACCEL_CONFIG
 
   delay(100);
 }
@@ -288,8 +298,8 @@ void updateIMU() {
     first = false;
   }
 
-  const float alphaAcc = 0.15f;  // accel LPF factor (lower = smoother)
-  const float alphaGyro = 0.30f; // gyro LPF factor
+  const float alphaAcc = 0.15f;   // accel LPF factor (lower = smoother)
+  const float alphaGyro = 0.30f;  // gyro LPF factor
 
   ax_f += alphaAcc * (ax - ax_f);
   ay_f += alphaAcc * (ay - ay_f);
@@ -303,19 +313,21 @@ void updateIMU() {
   lastGy_dps = gy_f;
   lastGz_dps = gz_f;
 
-  // gate accel when |a| is far from 1g (heavy thrust / hard hits)
+  // Optional: gate accel when |a| is far from 1 g (heavy thrust / hard hits)
   float a2 = ax_f * ax_f + ay_f * ay_f + az_f * az_f;
-  bool accelTrustworthy = (a2 > 0.5f && a2 < 1.5f);
+  bool accelTrustworthy = (a2 > 0.5f && a2 < 1.5f);  // tweak if needed
 
   if (accelTrustworthy) {
     filter.updateIMU(gx_f, gy_f, gz_f, ax_f, ay_f, az_f);
   } else {
+    // Gyro-only update: lie about accel so it doesn't blow up
+    // Use the last "good" accel direction (already in ax_f, ay_f, az_f)
     filter.updateIMU(gx_f, gy_f, gz_f, ax_f, ay_f, az_f);
   }
 
-  rollDeg  = filter.getRoll();
+  rollDeg = filter.getRoll();
   pitchDeg = filter.getPitch();
-  yawDeg   = filter.getYaw();
+  yawDeg = filter.getYaw();
 }
 
 
@@ -338,6 +350,7 @@ float t = 0.0;
 float lastPrint = 0.0;
 
 void updateStabilization() {
+
   unsigned long nowMs = millis();
   bool failsafe = false;
 
@@ -355,38 +368,75 @@ void updateStabilization() {
   float rollTerm = pidComputeRoll(rollDeg, targetRoll - (x * 4), lastGx_dps, lastDt);
   float pitchTerm = pidComputePitch(pitchDeg, targetPitch - (y * 4), lastGy_dps, lastDt);
   float yawTerm = pidComputeYaw(yawDeg, targetYaw, lastGz_dps, lastDt);
+  yawTerm = 0;
+  /*
+  Serial.print(targetRoll-rollDeg);
+  Serial.print(", ");
+  Serial.print(targetPitch-pitchDeg);
+  Serial.print(", ");
+  Serial.println(yawDeg);
+*/
+  //rollTerm = 0;
+  //pitchTerm = 0;
+  //yawTerm = 0;
+  //Serial.println(yawTerm);
 
   int fl = base + pitchTerm - rollTerm + yawTerm;
   int fr = base + pitchTerm + rollTerm - yawTerm;
   int bl = base - pitchTerm - rollTerm - yawTerm;
   int br = base - pitchTerm + rollTerm + yawTerm;
-
+/*
+  if (nowMs - lastPrint > 1000) {
+    Serial.print(t);
+    Serial.print(",");
+    Serial.print(fl);
+    Serial.print(",");
+    Serial.print(fr);
+    Serial.print(",");
+    Serial.print(bl);
+    Serial.print(",");
+    Serial.print(br);
+    Serial.print(",");
+    Serial.print(rollDeg);
+    Serial.print(",");
+    Serial.print(pitchDeg);
+    Serial.print(",");
+    Serial.print(yawDeg);
+    Serial.print(",");
+    Serial.print(rollError);
+    Serial.print(",");
+    Serial.print(pitchError);
+    Serial.print(",");
+    Serial.println(yawError);
+    lastPrint = nowMs;
+  }
+*/
   writeMotors(fl, fr, bl, br);
 }
-
+uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+uint8_t len = sizeof(buf);
 void handleLoRa() {
+  rf95.poll();  // manually handle IRQ flags
+  long currentMs = millis();
+  //return;
   if (!rf95.available()) return;
-
-  uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-  uint8_t len = sizeof(buf);
-
+  
   if (rf95.recv(buf, &len)) {
-    #if ARDUINOJSON_VERSION_MAJOR >= 7
-      JsonDocument doc;
-      DeserializationError err = deserializeJson(doc, buf, len);
-    #else
-      StaticJsonDocument<128> doc;
-      DeserializationError err = deserializeJson(doc, buf, len);
-    #endif
+#if ARDUINOJSON_VERSION_MAJOR >= 7
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, buf, len);
+#else
+    StaticJsonDocument<128> doc;
+    DeserializationError err = deserializeJson(doc, buf, len);
+#endif
 
     if (!err) {
-      t = doc["t"] | 0.0f; // 0.0 - 1.0
-      x = doc["x"] | 0.0f;       // 0.0 - 1.0
-      y = doc["y"] | 0.0f;       // 0.0 - 1.0
-      float p = doc["p"] | 0.0f; // 0.0 - 1.0
-      float i = doc["i"] | 0.0f; // 0.0 - 1.0
-      float d = doc["d"] | 0.0f; // 0.0 - 1.0
-
+      t = doc["t"] | 0.0f;        // 0.0 - 1.0
+      x = doc["x"] | 0.0f;        // 0.0 - 1.0
+      y = doc["y"] | 0.0f;        // 0.0 - 1.0
+      float p = doc["p"] | 0.0f;  // 0.0 - 1.0
+      float i = doc["i"] | 0.0f;  // 0.0 - 1.0
+      float d = doc["d"] | 0.0f;  // 0.0 - 1.0
       p *= 50;
       i *= 10;
       d *= 5;
@@ -467,29 +517,25 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lastImuMicros = micros();
+  long microsLive = micros();
+
+  static unsigned long lastImuMicros = microsLive;
   static unsigned long lastLoRaCheckMs = 0;
   static unsigned long lastPrintMs = 0;
 
-  unsigned long nowMicros = micros();
+  unsigned long nowMicros = microsLive;
   float dt = (nowMicros - lastImuMicros) / 1000000.0f;
 
   if (dt >= 0.004f) {
     lastImuMicros = nowMicros;
     lastDt = dt;
     updateIMU();
-    if (t > 0.1) updateStabilization();
-    else writeMotors(0, 0, 0, 0);
+    updateStabilization();
   }
 
   unsigned long nowMs = millis();
-
-  if (nowMs - lastLoRaCheckMs >= 0) {
+  if (nowMs - lastLoRaCheckMs > 30) {
     lastLoRaCheckMs = nowMs;
     handleLoRa();
-  }
-
-  if (t == 0){
-    writeMotors(0, 0, 0, 0);
   }
 }
