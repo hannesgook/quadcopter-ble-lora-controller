@@ -313,23 +313,12 @@ void updateIMU() {
   lastGy_dps = gy_f;
   lastGz_dps = gz_f;
 
-  // Optional: gate accel when |a| is far from 1 g (heavy thrust / hard hits)
-  float a2 = ax_f * ax_f + ay_f * ay_f + az_f * az_f;
-  bool accelTrustworthy = (a2 > 0.5f && a2 < 1.5f);  // tweak if needed
-
-  if (accelTrustworthy) {
-    filter.updateIMU(gx_f, gy_f, gz_f, ax_f, ay_f, az_f);
-  } else {
-    // Gyro-only update: lie about accel so it doesn't blow up
-    // Use the last "good" accel direction (already in ax_f, ay_f, az_f)
-    filter.updateIMU(gx_f, gy_f, gz_f, ax_f, ay_f, az_f);
-  }
+  filter.updateIMU(gx_f, gy_f, gz_f, ax_f, ay_f, az_f);
 
   rollDeg = filter.getRoll();
   pitchDeg = filter.getPitch();
   yawDeg = filter.getYaw();
 }
-
 
 void writeMotors(int fl, int fr, int bl, int br) {
   int cFl = clampUs(fl);
@@ -357,7 +346,7 @@ void updateStabilization() {
   if (nowMs - lastLoRaMs > 1000) failsafe = true;
 
   if (failsafe) {
-    writeMotors(0, 0, 0, 0);
+    writeMotors(1000, 1000, 1000, 1000);
     return;
   }
 
@@ -368,57 +357,20 @@ void updateStabilization() {
   float rollTerm = pidComputeRoll(rollDeg, targetRoll - (x * 4), lastGx_dps, lastDt);
   float pitchTerm = pidComputePitch(pitchDeg, targetPitch - (y * 4), lastGy_dps, lastDt);
   float yawTerm = pidComputeYaw(yawDeg, targetYaw, lastGz_dps, lastDt);
-  yawTerm = 0;
-  /*
-  Serial.print(targetRoll-rollDeg);
-  Serial.print(", ");
-  Serial.print(targetPitch-pitchDeg);
-  Serial.print(", ");
-  Serial.println(yawDeg);
-*/
-  //rollTerm = 0;
-  //pitchTerm = 0;
-  //yawTerm = 0;
-  //Serial.println(yawTerm);
 
   int fl = base + pitchTerm - rollTerm + yawTerm;
   int fr = base + pitchTerm + rollTerm - yawTerm;
   int bl = base - pitchTerm - rollTerm - yawTerm;
   int br = base - pitchTerm + rollTerm + yawTerm;
-/*
-  if (nowMs - lastPrint > 1000) {
-    Serial.print(t);
-    Serial.print(",");
-    Serial.print(fl);
-    Serial.print(",");
-    Serial.print(fr);
-    Serial.print(",");
-    Serial.print(bl);
-    Serial.print(",");
-    Serial.print(br);
-    Serial.print(",");
-    Serial.print(rollDeg);
-    Serial.print(",");
-    Serial.print(pitchDeg);
-    Serial.print(",");
-    Serial.print(yawDeg);
-    Serial.print(",");
-    Serial.print(rollError);
-    Serial.print(",");
-    Serial.print(pitchError);
-    Serial.print(",");
-    Serial.println(yawError);
-    lastPrint = nowMs;
-  }
-*/
+
   writeMotors(fl, fr, bl, br);
 }
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-uint8_t len = sizeof(buf);
 void handleLoRa() {
   rf95.poll();  // manually handle IRQ flags
   long currentMs = millis();
-  //return;
+  uint8_t len = sizeof(buf);
+  
   if (!rf95.available()) return;
   
   if (rf95.recv(buf, &len)) {
