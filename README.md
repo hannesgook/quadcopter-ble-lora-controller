@@ -18,14 +18,16 @@ raspberry_2_arduino/
 ### 1. Mobile App to Raspberry Pi
 
 A Flutter app that sends joystick values, throttle, and PID parameters over BLE.
+BLE is used only for short-range communication between the mobile app and the Raspberry Pi.
 
 ### 2. Raspberry Pi to Arduino
 
 The Raspberry Pi receives BLE packets, bridges them through LoRa, and transmits them to the Arduino flight controller.
+LoRa provides long-range communication with the drone.
 
 ### 3. Arduino Flight Controller
 
-The Arduino receives LoRa packets, parses control inputs, reads IMU data (MPU6050), runs a Madgwick filter, computes PID corrections, and drives four ESCs for quadcopter stabilization.
+The Arduino (ATmega328P in my case) receives LoRa packets, parses control inputs, reads IMU data (MPU6050), runs a Madgwick filter, computes PID corrections, and drives four ESCs for quadcopter stabilization.
 
 ## Quadcopter Prototype
 
@@ -51,7 +53,7 @@ Changes made:
 
 These changes were required to ensure stable real-time motor control.
 
-## Mobile App Notes
+### Mobile App Notes
 
 The mobile app is provided as Flutter source code (`mobile_app_2_raspberry/lib/main.dart`) together with dependency definitions. Platform-specific files can be generated using `flutter create`.
 
