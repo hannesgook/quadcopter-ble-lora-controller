@@ -89,7 +89,7 @@ float constrainf(float x, float a, float b) {
   return x;
 }
 
-int maxThrottle = 1400;
+int maxThrottle = 2000;
 
 inline int clampUs(int us) {
   if (us < 1000) return 1000;
@@ -121,12 +121,12 @@ float lastDt = 0.004f;
 
 AxisPID rollPID = {
   0.0f, 0.0f, 0.0f, 0.0f,
-  -500.0f, 500.0f
+  -50.0f, 50.0f
 };
 
 AxisPID pitchPID = {
   0.0f, 0.0f, 0.0f, 0.0f,
-  -500.0f, 500.0f
+  -50.0f, 50.0f
 };
 
 AxisPID yawPID = {
@@ -228,7 +228,6 @@ void mpuInit() {
 
   delay(100);
 }
-
 
 void mpuReadRaw(int16_t &ax, int16_t &ay, int16_t &az,
                 int16_t &gx, int16_t &gy, int16_t &gz) {
@@ -343,7 +342,7 @@ void updateStabilization() {
   unsigned long nowMs = millis();
   bool failsafe = false;
 
-  if (nowMs - lastLoRaMs > 1000) failsafe = true;
+  if (nowMs - lastLoRaMs > 500) failsafe = true;
 
   if (failsafe) {
     writeMotors(1000, 1000, 1000, 1000);
@@ -354,8 +353,8 @@ void updateStabilization() {
   if (base < 1000) base = 1000;
   if (base > maxThrottle) base = maxThrottle;
 
-  float rollTerm = pidComputeRoll(rollDeg, targetRoll - (x * 4), lastGx_dps, lastDt);
-  float pitchTerm = pidComputePitch(pitchDeg, targetPitch - (y * 4), lastGy_dps, lastDt);
+  float rollTerm = pidComputeRoll(rollDeg, targetRoll - (x * 15), lastGx_dps, lastDt);
+  float pitchTerm = pidComputePitch(pitchDeg, targetPitch - (y * 15), lastGy_dps, lastDt);
   float yawTerm = pidComputeYaw(yawDeg, targetYaw, lastGz_dps, lastDt);
 
   int fl = base + pitchTerm - rollTerm + yawTerm;
@@ -367,7 +366,7 @@ void updateStabilization() {
 }
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
 void handleLoRa() {
-  rf95.poll();  // manually handle IRQ flags
+  rf95.poll(); // manually handle IRQ flags
   long currentMs = millis();
   uint8_t len = sizeof(buf);
   
@@ -383,15 +382,15 @@ void handleLoRa() {
 #endif
 
     if (!err) {
-      t = doc["t"] | 0.0f;        // 0.0 - 1.0
-      x = doc["x"] | 0.0f;        // 0.0 - 1.0
+      t = doc["t"] | 0.0f;        // -1.0 - 1.0
+      x = doc["x"] | 0.0f;        // -1.0 - 1.0
       y = doc["y"] | 0.0f;        // 0.0 - 1.0
       float p = doc["p"] | 0.0f;  // 0.0 - 1.0
       float i = doc["i"] | 0.0f;  // 0.0 - 1.0
       float d = doc["d"] | 0.0f;  // 0.0 - 1.0
-      p *= 50;
+      p *= 5;
       i *= 10;
-      d *= 5;
+      d *= 1;
 
       rollPID.kp = p;
       rollPID.ki = i;
