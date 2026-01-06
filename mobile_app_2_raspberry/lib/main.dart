@@ -92,11 +92,24 @@ class ControlScreen extends StatefulWidget {
 class _ControlScreenState extends State<ControlScreen> {
   final _ble = FlutterReactiveBle();
 
-  Characteristic? _rxResolved;
+  double _pitchError = 0.0;
+  double _rollError = 0.0;
+  double _yawError = 0.0;
+
+  Characteristic? _txResolved;
+  StreamSubscription<List<int>>? _notifySub;
 
   double _p = 0.0;
   double _i = 0.0;
   double _d = 0.0;
+
+  double _p2 = 0.0;
+  double _i2 = 0.0;
+  double _d2 = 0.0;
+
+  double get P2 => _p2;
+  double get I2 => _i2;
+  double get D2 => _d2;
 
   double _throttle = 0.0;
   double get throttle => _throttle;
@@ -115,12 +128,15 @@ class _ControlScreenState extends State<ControlScreen> {
 
   final Uuid _serviceUuid = Uuid.parse("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
   final Uuid _rxCharUuid = Uuid.parse("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
+  final Uuid _txCharUuid = Uuid.parse("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
 
   String _targetName = "Ble-LoRa-Bridge";
 
   DiscoveredDevice? _device;
   StreamSubscription<DiscoveredDevice>? _scanSub;
   StreamSubscription<ConnectionStateUpdate>? _connSub;
+
+  Characteristic? _rxResolved;
 
   bool _scanning = false;
   bool _connecting = false;
@@ -132,6 +148,7 @@ class _ControlScreenState extends State<ControlScreen> {
 
   int _diagServiceCount = 0;
   bool _diagHasService = false;
+  bool _diagHasTx = false;
   bool _diagRxWritable = false;
 
   double _jx = 0;
@@ -167,10 +184,53 @@ class _ControlScreenState extends State<ControlScreen> {
     );
   }
 
+  void _startNotify() {
+    if (_device == null || _txResolved == null) return;
+
+    _notifySub?.cancel();
+
+    final qc = QualifiedCharacteristic(
+      deviceId: _device!.id,
+      serviceId: _serviceUuid,
+      characteristicId: _txCharUuid,
+    );
+
+    _notifySub = _ble
+        .subscribeToCharacteristic(qc)
+        .listen(
+          (data) {
+            final text = utf8.decode(data, allowMalformed: true).trim();
+            if (text.isEmpty) return;
+            // print("BLE notify: $text");
+            try {
+              final dynamic decoded = jsonDecode(text);
+              if (decoded is Map<String, dynamic>) {
+                final pe = (decoded["pitchError"] as num?)?.toDouble() ?? 0.0;
+                final re = (decoded["rollError"] as num?)?.toDouble() ?? 0.0;
+                final ye = (decoded["yawError"] as num?)?.toDouble() ?? 0.0;
+                setState(() {
+                  _pitchError = pe;
+                  _rollError = re;
+                  _yawError = ye;
+                });
+              }
+            } catch (e) {
+              // Ignore malformed telemetry
+              // print("Telemetry parse error: $e, text: $text");
+            }
+          },
+          onError: (e) {
+            // Not fatal, but good to know
+            // print("Notify error: $e");
+          },
+        );
+  }
+
   @override
   void dispose() {
     _scanSub?.cancel();
     _connSub?.cancel();
+    _notifySub?.cancel();
     super.dispose();
   }
 
@@ -198,6 +258,7 @@ class _ControlScreenState extends State<ControlScreen> {
       _lastError = "";
       _diagServiceCount = 0;
       _diagHasService = false;
+      _diagHasTx = false;
       _diagRxWritable = false;
       _rxResolved = null;
     });
@@ -268,6 +329,7 @@ class _ControlScreenState extends State<ControlScreen> {
               }
               _ready = true;
               setState(() => _status = "Connected");
+              _startNotify();
               _startSending();
             } else if (update.connectionState ==
                 DeviceConnectionState.disconnected) {
@@ -291,30 +353,39 @@ class _ControlScreenState extends State<ControlScreen> {
 
       Service? chosen;
       Characteristic? rxC;
+      Characteristic? txC;
 
       for (final s in nusServices) {
         final rxList = s.characteristics
             .where((c) => c.id == _rxCharUuid)
             .toList();
-        if (rxList.isNotEmpty) {
+        final txList = s.characteristics
+            .where((c) => c.id == _txCharUuid)
+            .toList();
+        if (rxList.isNotEmpty && txList.isNotEmpty) {
           final rxWritable = rxList.firstWhere(
             (c) => c.isWritableWithoutResponse || c.isWritableWithResponse,
             orElse: () => rxList.first,
           );
           chosen = s;
           rxC = rxWritable;
+          txC = txList.first;
           break;
         }
       }
 
-      if (chosen == null || rxC == null) {
+      if (chosen == null || rxC == null || txC == null) {
+        _diagHasTx = false;
         _diagRxWritable = false;
         _rxResolved = null;
+        _txResolved = null;
         setState(() {});
         return false;
       }
 
       _rxResolved = rxC;
+      _txResolved = txC;
+      _diagHasTx = true;
       _diagRxWritable =
           rxC.isWritableWithoutResponse || rxC.isWritableWithResponse;
 
@@ -329,12 +400,14 @@ class _ControlScreenState extends State<ControlScreen> {
 
   void _disconnect({String msg = "Disconnected"}) {
     _connSub?.cancel();
+    _notifySub?.cancel();
     _stopSending();
     _connected = false;
     _connecting = false;
     _scanning = false;
     _ready = false;
     _rxResolved = null;
+    _txResolved = null;
     setState(() {
       _status = msg;
       _lastError = "";
@@ -363,8 +436,16 @@ class _ControlScreenState extends State<ControlScreen> {
     final iStr = I.toStringAsFixed(2);
     final dStr = D.toStringAsFixed(2);
 
+    final p2Str = P2.toStringAsFixed(2);
+    final i2Str = I2.toStringAsFixed(2);
+    final d2Str = D2.toStringAsFixed(2);
+
     final bytes = Uint8List.fromList(
-      utf8.encode('{"t":$tStr,"x":$px,"y":$py,"p":$pStr,"i":$iStr,"d":$dStr}'),
+      utf8.encode(
+        '{"t":$tStr,"x":$px,"y":$py,'
+        '"p":$pStr,"i":$iStr,"d":$dStr,'
+        '"p2":$p2Str,"i2":$i2Str,"d2":$d2Str}',
+      ),
     );
 
     await _writeCoalesced(bytes);
@@ -510,6 +591,7 @@ class _ControlScreenState extends State<ControlScreen> {
                             Text(
                               "Has NUS service: ${_diagHasService ? "Yes" : "No"}",
                             ),
+                            Text("Has TX char: ${_diagHasTx ? "Yes" : "No"}"),
                             Text(
                               "RX writable: ${_diagRxWritable ? "Yes" : "No"}",
                             ),
@@ -527,6 +609,35 @@ class _ControlScreenState extends State<ControlScreen> {
                   if (_ready)
                     Column(
                       children: [
+                        SizedBox(
+                          width: maxContentWidth,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Throttle: ${throttle.toStringAsFixed(2)}",
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                              Slider(
+                                value: throttle,
+                                min: 0.0,
+                                max: 1.0,
+                                divisions: 100,
+                                label: throttle.toStringAsFixed(2),
+                                onChanged: (v) {
+                                  setState(() {
+                                    _throttle = double.parse(
+                                      v.toStringAsFixed(2),
+                                    );
+                                  });
+                                  _startSending();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.center,
@@ -534,8 +645,16 @@ class _ControlScreenState extends State<ControlScreen> {
                             SizedBox(
                               width: sideWidth,
                               child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  Text(
+                                    "Roll & Pitch PID",
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge,
+                                  ),
+                                  const SizedBox(height: 12),
+
                                   Text(
                                     "Responsiveness (P): ${P.toStringAsFixed(2)}",
                                     style: Theme.of(
@@ -556,6 +675,7 @@ class _ControlScreenState extends State<ControlScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 8),
+
                                   Text(
                                     "Drift correction (I): ${I.toStringAsFixed(2)}",
                                     style: Theme.of(
@@ -576,6 +696,7 @@ class _ControlScreenState extends State<ControlScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 8),
+
                                   Text(
                                     "Overshoot damping (D): ${D.toStringAsFixed(2)}",
                                     style: Theme.of(
@@ -628,32 +749,82 @@ class _ControlScreenState extends State<ControlScreen> {
                             SizedBox(
                               width: sideWidth,
                               child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "Throttle: ${throttle.toStringAsFixed(2)}",
+                                    "Yaw PID",
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge,
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  Text(
+                                    "Responsiveness (P): ${P2.toStringAsFixed(2)}",
                                     style: Theme.of(
                                       context,
                                     ).textTheme.bodyLarge,
                                   ),
+                                  Slider(
+                                    value: P2,
+                                    min: 0.0,
+                                    max: 1.0,
+                                    divisions: 100,
+                                    label: P2.toStringAsFixed(2),
+                                    onChanged: (v) {
+                                      setState(() {
+                                        _p2 = double.parse(
+                                          v.toStringAsFixed(2),
+                                        );
+                                      });
+                                      _startSending();
+                                    },
+                                  ),
                                   const SizedBox(height: 8),
-                                  SizedBox(
-                                    height: joySize * 0.8,
-                                    child: verticalSlider(
-                                      value: throttle,
-                                      min: 0.0,
-                                      max: 1.0,
-                                      divisions: 100,
-                                      label: throttle.toStringAsFixed(2),
-                                      onChanged: (v) {
-                                        setState(() {
-                                          _throttle = double.parse(
-                                            v.toStringAsFixed(2),
-                                          );
-                                        });
-                                        _startSending();
-                                      },
-                                    ),
+
+                                  Text(
+                                    "Drift correction (I): ${I2.toStringAsFixed(2)}",
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge,
+                                  ),
+                                  Slider(
+                                    value: I2,
+                                    min: 0.0,
+                                    max: 1.0,
+                                    divisions: 100,
+                                    label: I2.toStringAsFixed(2),
+                                    onChanged: (v) {
+                                      setState(() {
+                                        _i2 = double.parse(
+                                          v.toStringAsFixed(2),
+                                        );
+                                      });
+                                      _startSending();
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  Text(
+                                    "Overshoot damping (D): ${D2.toStringAsFixed(2)}",
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge,
+                                  ),
+                                  Slider(
+                                    value: D2,
+                                    min: 0.0,
+                                    max: 1.0,
+                                    divisions: 100,
+                                    label: D2.toStringAsFixed(2),
+                                    onChanged: (v) {
+                                      setState(() {
+                                        _d2 = double.parse(
+                                          v.toStringAsFixed(2),
+                                        );
+                                      });
+                                      _startSending();
+                                    },
                                   ),
                                 ],
                               ),

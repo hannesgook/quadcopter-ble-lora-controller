@@ -130,7 +130,7 @@ AxisPID pitchPID = {
 };
 
 AxisPID yawPID = {
-  2.5f, 0.0f, 0.0f, 0.0f,
+  10.0f, 0.0f, 2.0f, 0.0f,
   -100.0f, 100.0f
 };
 
@@ -161,6 +161,7 @@ inline float pidComputeRoll(float angle, float targetAngle, float gyroDps, float
   AxisPID &pid = rollPID;
 
   rollError = targetAngle - angle;
+  //Serial.println(rollError);
 
   pid.iTerm += pid.ki * rollError * dt;
   if (pid.iTerm > pid.outMax) pid.iTerm = pid.outMax;
@@ -338,11 +339,10 @@ float t = 0.0;
 float lastPrint = 0.0;
 
 void updateStabilization() {
-
   unsigned long nowMs = millis();
   bool failsafe = false;
 
-  if (nowMs - lastLoRaMs > 500) failsafe = true;
+  if (nowMs - lastLoRaMs > 1000) failsafe = true;
 
   if (failsafe) {
     writeMotors(1000, 1000, 1000, 1000);
@@ -364,47 +364,60 @@ void updateStabilization() {
 
   writeMotors(fl, fr, bl, br);
 }
-uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+uint8_t buf[96];//RH_RF95_MAX_MESSAGE_LEN];
+static StaticJsonDocument<JSON_OBJECT_SIZE(9) + 96> loraDoc;
+
 void handleLoRa() {
-  rf95.poll(); // manually handle IRQ flags
-  long currentMs = millis();
+  rf95.poll();
   uint8_t len = sizeof(buf);
-  
+
   if (!rf95.available()) return;
-  
-  if (rf95.recv(buf, &len)) {
-#if ARDUINOJSON_VERSION_MAJOR >= 7
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, buf, len);
-#else
-    StaticJsonDocument<128> doc;
-    DeserializationError err = deserializeJson(doc, buf, len);
-#endif
+  if (!rf95.recv(buf, &len)) return;
 
-    if (!err) {
-      t = doc["t"] | 0.0f;        // -1.0 - 1.0
-      x = doc["x"] | 0.0f;        // -1.0 - 1.0
-      y = doc["y"] | 0.0f;        // 0.0 - 1.0
-      float p = doc["p"] | 0.0f;  // 0.0 - 1.0
-      float i = doc["i"] | 0.0f;  // 0.0 - 1.0
-      float d = doc["d"] | 0.0f;  // 0.0 - 1.0
-      p *= 5;
-      i *= 10;
-      d *= 1;
+  loraDoc.clear();
+  DeserializationError err = deserializeJson(loraDoc, buf, len);
 
-      rollPID.kp = p;
-      rollPID.ki = i;
-      rollPID.kd = d;
-
-      pitchPID.kp = p;
-      pitchPID.ki = i;
-      pitchPID.kd = d;
-
-      baseThrottleUs = throttleFromY(t);
-      lastLoRaMs = millis();
-    }
+  if (err) {
+    Serial.print("JSON err: ");
+    Serial.println(err.c_str());
+    return;
   }
+
+  t = loraDoc["t"] | 0.0f;
+  x = loraDoc["x"] | 0.0f;
+  y = loraDoc["y"] | 0.0f;
+
+  float p  = loraDoc["p"]  | 0.0f;
+  float i  = loraDoc["i"]  | 0.0f;
+  float d  = loraDoc["d"]  | 0.0f;
+
+  float p2 = loraDoc["p2"] | 0.0f;
+  float i2 = loraDoc["i2"] | 0.0f;
+  float d2 = loraDoc["d2"] | 0.0f;
+
+  p *= 5.0f;
+  i *= 10.0f;
+
+  p2 *= 10;
+  i2 *= 10;
+  d2 *= 10;
+
+  rollPID.kp = p;
+  rollPID.ki = i;
+  rollPID.kd = d;
+
+  pitchPID.kp = p;
+  pitchPID.ki = i;
+  pitchPID.kd = d;
+
+  yawPID.kp = p2;
+  yawPID.ki = i2;
+  yawPID.kd = d2;
+
+  baseThrottleUs = throttleFromY(t);
+  lastLoRaMs = millis();
 }
+
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);

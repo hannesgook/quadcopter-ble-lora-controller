@@ -29,6 +29,19 @@ LoRa provides long-range communication with the drone.
 
 The Arduino (ATmega328P in my case) receives LoRa packets, parses control inputs, reads IMU data (MPU6050), runs a Madgwick filter, computes PID corrections, and drives four ESCs for quadcopter stabilization.
 
+### Failsafe Behavior
+
+The flight controller implements a communication failsafe based on LoRa packet reception.
+
+If no valid packet is received for **1000 ms**, failsafe is triggered:
+- All ESCs are immediately set to **1000 µs**
+- PID computations are skipped
+- Motors remain at minimum throttle until communication resumes
+
+The failsafe state is automatically cleared as soon as a new valid LoRa packet is received.
+
+Failsafe triggers **~1000 ms** after pressing **Disconnect** in the app, since no further LoRa packets are received.
+
 ## Quadcopter Prototype
 
 ![Quadcopter top view](images/quadcopter_top_view.jpg)
