@@ -11,6 +11,7 @@ All programming in this repository was developed by **Hannes Göök**.
 arduino_rx_drone_control/
 mobile_app_2_raspberry/
 raspberry_2_arduino/
+images/
 ```
 
 ## System Overview
