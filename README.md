@@ -43,6 +43,13 @@ The failsafe state is automatically cleared as soon as a new valid LoRa packet i
 
 Failsafe triggers **~1000 ms** after pressing **Disconnect** in the app, since no further LoRa packets are received.
 
+### Control Notes
+
+Setting throttle to zero does not always fully stop all motors if yaw PID gains are non-zero.
+Yaw corrections can still introduce motor output at low throttle.
+
+To guarantee full motor cutoff, the communication failsafe must be triggered or the system must be disarmed.
+
 ## Quadcopter Prototype
 
 ![Quadcopter top view](images/quadcopter_top_view.jpg)
