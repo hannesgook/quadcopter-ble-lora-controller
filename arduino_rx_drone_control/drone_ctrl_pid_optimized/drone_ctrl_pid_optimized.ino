@@ -267,8 +267,8 @@ void updateIMU() {
   filter.updateIMU(gx_f, gy_f, gz_f, ax_f, ay_f, az_f);
 
   rollDeg = filter.getRoll();
-  pitchDeg = filter.getPitch();
-  yawDeg = filter.getYaw();
+  pitchDeg = -filter.getPitch();
+  yawDeg = -filter.getYaw();
 }
 
 void writeMotors(int fl, int fr, int bl, int br) {
@@ -302,8 +302,8 @@ void updateStabilization() {
   clampUs(1000);
 
   float rollTerm = pidCompute(rollPID, rollDeg, targetRoll - (x * 15), lastGx_dps, lastDt);
-  float pitchTerm = pidCompute(pitchPID, pitchDeg, targetPitch - (y * 15), lastGy_dps, lastDt);
-  float yawTerm = pidCompute(yawPID, yawDeg, targetYaw, lastGz_dps, lastDt);
+  float pitchTerm = -pidCompute(pitchPID, pitchDeg, targetPitch + (y * 15), lastGy_dps, lastDt);
+  float yawTerm = -pidCompute(yawPID, yawDeg, targetYaw, lastGz_dps, lastDt);
 
   int fl = base + pitchTerm - rollTerm + yawTerm;
   int fr = base + pitchTerm + rollTerm - yawTerm;
