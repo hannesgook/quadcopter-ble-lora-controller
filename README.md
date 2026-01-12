@@ -24,11 +24,11 @@ BLE is used only for short-range communication between the mobile app and the Ra
 ### 2. Raspberry Pi to Arduino
 
 The Raspberry Pi receives BLE packets, bridges them through LoRa, and transmits them to the Arduino flight controller.
-LoRa provides long-range communication with the drone.
+LoRa is used here to get reliable long-range control without relying on Wi-Fi or BLE.
 
 ### 3. Arduino Flight Controller
 
-The Arduino (ATmega328P in my case) receives LoRa packets, parses control inputs, reads IMU data (MPU6050), runs a Madgwick filter, computes PID corrections, and drives four ESCs for quadcopter stabilization.
+The Arduino (ATmega328P in our case) receives LoRa packets, parses control inputs, reads IMU data (MPU6050), runs a Madgwick filter, computes PID corrections, and drives four ESCs for quadcopter stabilization.
 
 ### Failsafe Behavior
 
@@ -45,7 +45,7 @@ Failsafe triggers **~1000 ms** after pressing **Disconnect** in the app, since n
 
 ### Control Notes
 
-Setting throttle to zero does not always fully stop all motors if yaw PID gains are non-zero.
+Setting throttle to zero does not always fully stop all motors if yaw PID gains are not set to zero.
 Yaw corrections can still introduce motor output at low throttle.
 
 To guarantee full motor cutoff, the communication failsafe must be triggered or the system must be disarmed.
@@ -62,7 +62,7 @@ To guarantee full motor cutoff, the communication failsafe must be triggered or 
 
 The system has been tested on a real quadcopter built together with my project partners, and is able to take off and fly under manual control from the mobile app.
 
-Due to a simple frame design, limited mechanical tuning, and non-final PID parameters, the quadcopter is not perfectly stable and tends to spin. The controller is intended as a working prototype rather than a production-grade flight controller.
+Due to a simple frame design, limited mechanical tuning, and non-final PID parameters, the quadcopter is not perfectly stable and tends to drift. The controller is intended as a working prototype rather than a production-grade flight controller.
 
 ## Dependencies and Notes
 
@@ -72,11 +72,16 @@ Changes made:
 - The file `RH_ASK.cpp` was disabled (renamed to `RH_ASK.cpp.disabled`) to avoid conflicts with the LoRa module.
 - Atomic sections (`ATOMIC_BLOCK_START` / `ATOMIC_BLOCK_END`) were removed in `RHSPIDriver.cpp` to prevent blocking behavior that interfered with motor timing.
 
-These changes were required to ensure stable real-time motor control.
+These changes were required to ensure stable real-time motor control. Without them, motor timing was unreliable.
 
 ### Mobile App Notes
 
 The mobile app is provided as Flutter source code (`mobile_app_2_raspberry/lib/main.dart`) together with dependency definitions. Platform-specific files can be generated using `flutter create`.
+
+### Possible Next Steps
+
+- Add a barometer module to estimate altitude and enable basic altitude hold.
+- Integrate GPS to compensate for horizontal drift.
 
 ## License
 
