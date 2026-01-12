@@ -82,6 +82,7 @@ float targetYaw = 0.0;
 
 int baseThrottleUs = 1000;
 unsigned long lastLoRaMs = 0;
+float lastDt = 0.004f;
 
 float constrainf(float x, float a, float b) {
   if (x < a) return a;
@@ -91,13 +92,13 @@ float constrainf(float x, float a, float b) {
 
 int maxThrottle = 2000;
 
-inline int clampUs(int us) {
+int clampUs(int us) {
   if (us < 1000) return 1000;
   if (us > maxThrottle) return maxThrottle;
   return us;
 }
 
-inline int throttleFromY(float y) {
+int throttleFromY(float y) {
   if (y < 0) y = 0;
   if (y > 1) y = 1;
 
@@ -108,95 +109,45 @@ inline int throttleFromY(float y) {
   return us;
 }
 
-struct AxisPID {
+typedef struct AxisPID {
   float kp;
   float ki;
   float kd;
   float iTerm;
   float outMin;
   float outMax;
-};
+} AxisPID_t;
 
-float lastDt = 0.004f;
+float pidCompute(AxisPID_t &pid, float angle, float targetAngle, float gyroDps, float dt);
 
-AxisPID rollPID = {
+float pidCompute(AxisPID_t &pid, float angle, float targetAngle, float gyroDps, float dt) {
+  float error = targetAngle - angle;
+
+  pid.iTerm += pid.ki * error * dt;
+  if (pid.iTerm > pid.outMax) pid.iTerm = pid.outMax;
+  if (pid.iTerm < pid.outMin) pid.iTerm = pid.outMin;
+
+  float out = pid.kp * error - pid.kd * gyroDps + pid.iTerm;
+  if (out > pid.outMax) out = pid.outMax;
+  if (out < pid.outMin) out = pid.outMin;
+
+  return out;
+}
+
+AxisPID_t rollPID = {
   0.0f, 0.0f, 0.0f, 0.0f,
   -50.0f, 50.0f
 };
 
-AxisPID pitchPID = {
+AxisPID_t pitchPID = {
   0.0f, 0.0f, 0.0f, 0.0f,
   -50.0f, 50.0f
 };
 
-AxisPID yawPID = {
+AxisPID_t yawPID = {
   10.0f, 0.0f, 2.0f, 0.0f,
   -100.0f, 100.0f
 };
-
-float yawError = 0.0f;
-
-inline float pidComputeYaw(float angle, float targetAngle, float gyroDps, float dt) {
-  AxisPID &pid = yawPID;
-
-  yawError = targetAngle - angle;
-
-  pid.iTerm += pid.ki * yawError * dt;
-  if (pid.iTerm > pid.outMax) pid.iTerm = pid.outMax;
-  if (pid.iTerm < pid.outMin) pid.iTerm = pid.outMin;
-
-  float pTerm = pid.kp * yawError;
-  float dTerm = -pid.kd * gyroDps;
-
-  float output = pTerm + pid.iTerm + dTerm;
-  if (output > pid.outMax) output = pid.outMax;
-  if (output < pid.outMin) output = pid.outMin;
-
-  return output;
-}
-
-float rollError = 0.0;
-
-inline float pidComputeRoll(float angle, float targetAngle, float gyroDps, float dt) {
-  AxisPID &pid = rollPID;
-
-  rollError = targetAngle - angle;
-  //Serial.println(rollError);
-
-  pid.iTerm += pid.ki * rollError * dt;
-  if (pid.iTerm > pid.outMax) pid.iTerm = pid.outMax;
-  if (pid.iTerm < pid.outMin) pid.iTerm = pid.outMin;
-
-  float pTerm = pid.kp * rollError;
-  float dTerm = -pid.kd * gyroDps;
-
-  float output = pTerm + pid.iTerm + dTerm;
-  if (output > pid.outMax) output = pid.outMax;
-  if (output < pid.outMin) output = pid.outMin;
-
-  return output;
-}
-
-float pitchError = 0.0;
-
-inline float pidComputePitch(float angle, float targetAngle, float gyroDps, float dt) {
-  AxisPID &pid = pitchPID;
-
-  pitchError = targetAngle - angle;
-
-  pid.iTerm += pid.ki * pitchError * dt;
-  if (pid.iTerm > pid.outMax) pid.iTerm = pid.outMax;
-  if (pid.iTerm < pid.outMin) pid.iTerm = pid.outMin;
-
-  float pTerm = pid.kp * pitchError;
-  float dTerm = -pid.kd * gyroDps;
-
-  float output = pTerm + pid.iTerm + dTerm;
-  if (output > pid.outMax) output = pid.outMax;
-  if (output < pid.outMin) output = pid.outMin;
-
-  return output;
-}
 
 inline float fastAbs(float v) {
   return v < 0.0f ? -v : v;
@@ -336,8 +287,6 @@ float x = 0.0;
 float y = 0.0;
 float t = 0.0;
 
-float lastPrint = 0.0;
-
 void updateStabilization() {
   unsigned long nowMs = millis();
   bool failsafe = false;
@@ -350,12 +299,11 @@ void updateStabilization() {
   }
 
   int base = baseThrottleUs;
-  if (base < 1000) base = 1000;
-  if (base > maxThrottle) base = maxThrottle;
+  clampUs(1000);
 
-  float rollTerm = pidComputeRoll(rollDeg, targetRoll - (x * 15), lastGx_dps, lastDt);
-  float pitchTerm = pidComputePitch(pitchDeg, targetPitch - (y * 15), lastGy_dps, lastDt);
-  float yawTerm = pidComputeYaw(yawDeg, targetYaw, lastGz_dps, lastDt);
+  float rollTerm = pidCompute(rollPID, rollDeg, targetRoll - (x * 15), lastGx_dps, lastDt);
+  float pitchTerm = pidCompute(pitchPID, pitchDeg, targetPitch - (y * 15), lastGy_dps, lastDt);
+  float yawTerm = pidCompute(yawPID, yawDeg, targetYaw, lastGz_dps, lastDt);
 
   int fl = base + pitchTerm - rollTerm + yawTerm;
   int fr = base + pitchTerm + rollTerm - yawTerm;
@@ -417,7 +365,6 @@ void handleLoRa() {
   baseThrottleUs = throttleFromY(t);
   lastLoRaMs = millis();
 }
-
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -485,7 +432,6 @@ void loop() {
 
   static unsigned long lastImuMicros = microsLive;
   static unsigned long lastLoRaCheckMs = 0;
-  static unsigned long lastPrintMs = 0;
 
   unsigned long nowMicros = microsLive;
   float dt = (nowMicros - lastImuMicros) / 1000000.0f;
