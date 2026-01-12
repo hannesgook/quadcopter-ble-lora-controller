@@ -66,9 +66,10 @@ Due to a simple frame design, limited mechanical tuning, and non-final PID param
 
 ## Dependencies and Notes
 
-This project relies on a modified version of the RadioHead library.
+This project depends on the RadioHead library, which is installed separately in Arduino IDE and is not included in this repo.
+During development, I made local modifications to RadioHead.
 
-Changes made:
+Local changes made:
 - The file `RH_ASK.cpp` was disabled (renamed to `RH_ASK.cpp.disabled`) to avoid conflicts with the LoRa module.
 - Atomic sections (`ATOMIC_BLOCK_START` / `ATOMIC_BLOCK_END`) were removed in `RHSPIDriver.cpp` to prevent blocking behavior that interfered with motor timing.
 
