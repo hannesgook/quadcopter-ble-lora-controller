@@ -45,8 +45,8 @@ Failsafe triggers **~1000 ms** after pressing **Disconnect** in the app, since n
 
 ### Control Notes
 
-Setting throttle to zero does not always fully stop all motors if yaw PID gains are not set to zero.
-Yaw corrections can still introduce motor output at low throttle.
+Setting throttle to zero does not always fully stop all motors if PID gains are not set to zero.
+Stabilization corrections can still introduce motor output at low throttle.
 
 To guarantee full motor cutoff, the communication failsafe must be triggered or the system must be disarmed.
 
