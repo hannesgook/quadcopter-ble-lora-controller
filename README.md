@@ -3,15 +3,44 @@
 This repository contains all code developed for our Swedish upper-secondary _Gymnasiearbete_ project.  
 The system implements a complete communication chain for controlling a quadcopter using BLE, LoRa, and an onboard IMU-based flight controller.
 
-All programming in this repository was developed by **Hannes Göök**.
+## Contributions
+
+### Project Lead
+
+**Hannes Göök**
+
+Led the overall system implementation and design, including:
+
+- Development of the Arduino-based flight controller:
+  - PID control logic and stabilization behavior
+  - IMU data handling and orientation filtering using a Madgwick filter
+  - ESC communication and motor control
+  - Communication failsafe handling
+
+- Wireless communication software and bridging:
+  - BLE communication between the mobile app and Raspberry Pi
+  - LoRa-based long-range link between Raspberry Pi and flight controller
+
+- Flutter-based mobile control application
+- CAD design of the quadcopter airframe (designed in Fusion 360)
+- System integration and most hardware assembly
+
+### Contributors
+
+- **Isak Roos** – budgeting, hardware sketching and implementation, soldering, documentation, testing, and validation  
+- **Olle Einvall** – quadcopter sketching, documentation, security considerations, exploration, investments, and testing
+- **Hugo Persson** – hardware preparation, video documentation, and testing
 
 ## Repository Structure
 
 ```
-arduino_rx_drone_control/
-mobile_app_2_raspberry/
-raspberry_2_arduino/
-images/
+arduino_rx_drone_control/     Arduino code
+mobile_app_2_raspberry/       Mobile app code
+raspberry_2_arduino/          Raspberry Pi code
+
+images/                       Documentation images
+README.md                     Project overview
+LICENSE                       Project license
 ```
 
 ## System Overview
@@ -83,6 +112,7 @@ The mobile app is provided as Flutter source code (`mobile_app_2_raspberry/lib/m
 
 - Add a barometer module to estimate altitude and enable basic altitude hold.
 - Integrate GPS to compensate for horizontal drift.
+- Redesign the quadcopter frame to improve vertical stiffness under thrust.
 
 ## License
 
