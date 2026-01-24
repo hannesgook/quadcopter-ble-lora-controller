@@ -1,7 +1,9 @@
 # Drone Control System
 
 This repository contains all code developed for our Swedish upper-secondary _Gymnasiearbete_ project.  
-The system implements a complete communication chain for controlling a quadcopter using BLE, LoRa, and an onboard IMU-based flight controller.
+The system implements a complete communication chain for controlling a quadcopter using BLE, LoRa, and an onboard custom Arduino-based flight controller implemented from scratch.
+
+The entire system is built from scratch without relying on existing flight control frameworks. Standard libraries were used where appropriate, and in one case modified at the source level to meet real-time control requirements.
 
 ## Contributions
 
@@ -9,19 +11,19 @@ The system implements a complete communication chain for controlling a quadcopte
 
 **Hannes Göök**
 
-Led the overall system implementation and design, including:
+Responsible for the overall system architecture and primary implementation, including:
 
-- Development of the Arduino-based flight controller:
+- Design and implementation of the custom **Arduino-based flight controller**:
   - PID control logic and stabilization behavior
   - IMU data handling and orientation filtering using a Madgwick filter
   - ESC communication and motor control
   - Communication failsafe handling
 
-- Wireless communication software and bridging:
+- Design and implementation of the end-to-end **wireless communication chain**
   - BLE communication between the mobile app and Raspberry Pi
   - LoRa-based long-range link between Raspberry Pi and flight controller
 
-- Flutter-based mobile control application
+- Development of the **Flutter-based mobile control application**
 - CAD design of the quadcopter airframe (designed in Fusion 360)
 - System integration and most hardware assembly
 
@@ -91,7 +93,7 @@ To guarantee full motor cutoff, the communication failsafe must be triggered or 
 
 The system has been tested on a real quadcopter built together with my project partners, and is able to take off and fly under manual control from the mobile app.
 
-Due to a simple frame design, limited mechanical tuning, and non-final PID parameters, the quadcopter is not perfectly stable and tends to drift. The controller is intended as a working prototype rather than a production-grade flight controller.
+Due to limited mechanical tuning and non-final PID parameters, the quadcopter is not perfectly stable and tends to drift. The controller is intended as a working prototype rather than a production-grade flight controller.
 
 ## Dependencies and Notes
 
@@ -112,7 +114,6 @@ The mobile app is provided as Flutter source code (`mobile_app_2_raspberry/lib/m
 
 - Add a barometer module to estimate altitude and enable basic altitude hold.
 - Integrate GPS to compensate for horizontal drift.
-- Redesign the quadcopter frame to improve vertical stiffness under thrust.
 
 ## License
 

@@ -8,10 +8,10 @@
 #include <Wire.h>
 #include <MadgwickAHRS.h>
 
-Servo esc1;  // D3 - Back left
-Servo esc2;  // D5 - Front left
-Servo esc3;  // D9 - Back right
-Servo esc4;  // D10 - Front right
+Servo esc1;  // D3 - Back left (spins counter-clockwise)
+Servo esc2;  // D5 - Front left (spins clockwise)
+Servo esc3;  // D9 - Back right (spins clockwise)
+Servo esc4;  // D10 - Front right (spins counter-clockwise)
 
 #define MPU6050_ADDR 0x68
 
@@ -266,8 +266,8 @@ void updateIMU() {
 
   filter.updateIMU(gx_f, gy_f, gz_f, ax_f, ay_f, az_f);
 
-  rollDeg = filter.getRoll();
-  pitchDeg = -filter.getPitch();
+  rollDeg = -filter.getRoll();
+  pitchDeg = filter.getPitch();
   yawDeg = -filter.getYaw();
 }
 
@@ -301,8 +301,8 @@ void updateStabilization() {
   int base = baseThrottleUs;
   clampUs(1000);
 
-  float rollTerm = pidCompute(rollPID, rollDeg, targetRoll - (x * 15), lastGx_dps, lastDt);
-  float pitchTerm = -pidCompute(pitchPID, pitchDeg, targetPitch + (y * 15), lastGy_dps, lastDt);
+  float rollTerm = -pidCompute(rollPID, rollDeg, targetRoll - (x * 15), lastGx_dps, lastDt);
+  float pitchTerm = pidCompute(pitchPID, pitchDeg, targetPitch + (y * 15), lastGy_dps, lastDt);
   float yawTerm = -pidCompute(yawPID, yawDeg, targetYaw, lastGz_dps, lastDt);
 
   int fl = base + pitchTerm - rollTerm + yawTerm;
