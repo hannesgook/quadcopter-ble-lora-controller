@@ -396,7 +396,7 @@ void updateStabilization() {
   }
 
   float targetRollDeg  = stickRoll  * STICK_MAX_ANGLE_DEG;
-  float targetPitchDeg = stickPitch * STICK_MAX_ANGLE_DEG;
+  float targetPitchDeg = -stickPitch * STICK_MAX_ANGLE_DEG;
 
   float rollErrDeg  = targetRollDeg  - (rollDeg - rollArmRef);
   float pitchErrDeg = targetPitchDeg - (pitchDeg - pitchArmRef);
