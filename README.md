@@ -1,7 +1,7 @@
 # Drone Control System
 
 This repository contains all code developed for our Swedish upper-secondary _Gymnasiearbete_ project.  
-The system implements a complete communication chain for controlling a quadcopter using BLE, LoRa, and an onboard custom Arduino-based flight controller implemented from scratch.
+The system implements a complete communication chain for controlling a quadcopter using BLE, LoRa, and an onboard custom Arduino-based flight controller implemented from first principles.
 
 The entire system is built from scratch without relying on existing flight control frameworks. Standard libraries were used where appropriate, and in one case modified at the source level to meet real-time control requirements.
 
@@ -14,7 +14,7 @@ The entire system is built from scratch without relying on existing flight contr
 Responsible for the overall system architecture and primary implementation, including:
 
 - Design and implementation of the custom **Arduino-based flight controller**:
-  - PID control logic and stabilization behavior
+  - Cascaded angle-rate PID control logic and stabilization behavior
   - IMU data handling and orientation filtering using a Madgwick filter
   - ESC communication and motor control
   - Communication failsafe handling
@@ -36,9 +36,14 @@ Responsible for the overall system architecture and primary implementation, incl
 ## Repository Structure
 
 ```
-arduino_rx_drone_control/     Arduino code
-mobile_app_2_raspberry/       Mobile app code
-raspberry_2_arduino/          Raspberry Pi code
+arduino_rx_drone_control/
+  flight_controller/          Flight controller
+  tools/                      Calibration and test utilities
+    imu_deadzone_tester/      IMU deadzone measurement
+    motor_assigner/           Motor order verification
+
+mobile_app_2_raspberry/       Mobile app (BLE)
+raspberry_2_arduino/          Raspberry Pi LoRa bridge
 
 images/                       Documentation images
 README.md                     Project overview
@@ -73,6 +78,8 @@ If no valid packet is received for **1000 ms**, failsafe is triggered:
 The failsafe state is automatically cleared as soon as a new valid LoRa packet is received.
 
 Failsafe triggers **~1000 ms** after pressing **Disconnect** in the app, since no further LoRa packets are received.
+
+Additional internal safety checks are implemented in the flight controller to prevent invalid motor output under certain sensor fault conditions.
 
 ### Control Notes
 
