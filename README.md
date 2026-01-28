@@ -45,6 +45,8 @@ arduino_rx_drone_control/
 mobile_app_2_raspberry/       Mobile app (BLE)
 raspberry_2_arduino/          Raspberry Pi LoRa bridge
 
+cad/                          CAD files for the quadcopter airframe
+  drone_frame.stl             3D-printable airframe model
 images/                       Documentation images
 README.md                     Project overview
 LICENSE                       Project license
@@ -91,6 +93,14 @@ To guarantee full motor cutoff, the communication failsafe must be triggered or 
 ## Quadcopter Prototype
 
 ![Quadcopter top view](images/quadcopter_top_view.jpg)
+
+## Airframe CAD Model
+
+The quadcopter airframe was custom-designed in Fusion 360 and is included in this repository as a single STL file:
+- `cad/drone_frame.stl`
+![Quadcopter CAD design](images/drone_frame.png)
+
+It represents the physical prototype used for testing.
 
 ## Full System Setup
 
