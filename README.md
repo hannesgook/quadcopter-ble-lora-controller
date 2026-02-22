@@ -5,6 +5,10 @@ The system implements a complete communication chain for controlling a quadcopte
 
 The entire system is built from scratch without relying on existing flight control frameworks. Standard libraries were used where appropriate, and in one case modified at the source level to meet real-time control requirements.
 
+**Our project has qualified for the Unga Forskare semi-final exhibition (February 27, 2026 - Lund), the Swedish national science and research competition for young people**
+
+![Full system setup](images/full_system_setup.jpg)
+
 ## Contributions
 
 ### Project Lead
@@ -58,6 +62,8 @@ LICENSE                       Project license
 A Flutter app that sends joystick values, throttle, and PID parameters over BLE.
 BLE is used only for short-range communication between the mobile app and the Raspberry Pi.
 
+Mobile app repo: [PidraQ](https://github.com/hannesgook/pidraq)
+
 ### 2. Raspberry Pi to Arduino
 
 The Raspberry Pi receives BLE packets, bridges them through LoRa, and transmits them to the Arduino flight controller.
@@ -103,15 +109,15 @@ The quadcopter airframe was custom-designed in Fusion 360 and is included in thi
 
 It represents the physical prototype used for testing.
 
-## Full System Setup
-
-![Full system setup](images/full_system_setup.jpg)
-
 ## Status
 
 The system has been tested on a real quadcopter built together with my project partners, and is able to take off and fly under manual control from the mobile app.
 
-Due to limited mechanical tuning and non-final PID parameters, the quadcopter is not perfectly stable and tends to drift. The controller is intended as a working prototype rather than a production-grade flight controller.
+Milestones achieved:
+- 5 second flight with a clean, controlled landing
+- 10 second flight with a rough but planar landing
+
+Due to limited mechanical tuning, no GPS, and non-final PID parameters, the quadcopter is not perfectly stable during takeoff and tends to drift. The controller is intended as a working prototype rather than a production-grade flight controller.
 
 ## Dependencies and Notes
 
