@@ -49,10 +49,10 @@ class UARTDevice:
             t.start()
 
     @classmethod
-    def _enqueue_latest(cls, text: str):
+    def _enqueue_latest(cls, pkt: bytes):
         while True:
             try:
-                cls.lora_queue.put_nowait(text)
+                cls.lora_queue.put_nowait(pkt)
                 break
             except queue.Full:
                 try:
@@ -64,8 +64,8 @@ class UARTDevice:
     def _lora_loop(cls):
         last_send = 0.0
         while cls.running:
-            text = cls.lora_queue.get()
-            if text is None:
+            pkt = cls.lora_queue.get()
+            if pkt is None:
                 break
 
             if not cls.connected:
@@ -74,7 +74,7 @@ class UARTDevice:
 
             now = time.time()
             dt = now - last_send
-            target_period = 0.1  # 10 Hz
+            target_period = 0.1
             if dt < target_period:
                 time.sleep(target_period - dt)
 
@@ -87,9 +87,9 @@ class UARTDevice:
                 continue
 
             try:
-                rfm9x.send(text.encode("utf-8"))
+                rfm9x.send(pkt)  # <-- raw bytes
                 last_send = time.time()
-                print("Sent over LoRa:", text)
+                # print("Sent over LoRa:", pkt.hex())
             except Exception as e:
                 print("LoRa send failed:", e)
 
@@ -131,12 +131,11 @@ class UARTDevice:
             print("Ignoring RX, no BLE device connected")
             return
 
-        raw = bytes(value)
-        text = raw.decode('utf-8', errors='replace').strip()
-        print("BLE RX:", text)
+        raw = bytes(value)        # <-- raw bytes from BLE
+        # print("BLE RX:", raw.hex())
 
-        cls._enqueue_latest(text)
-        cls.update_tx(value)
+        cls._enqueue_latest(raw)
+        cls.update_tx(value)      # echo back if you want
 
 def main(adapter_address):
     UARTDevice.start_lora_thread()

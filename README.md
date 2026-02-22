@@ -29,7 +29,7 @@ Responsible for the overall system architecture and primary implementation, incl
 
 ### Contributors
 
-- **Isak Roos** – budgeting, hardware sketching and implementation, soldering, documentation, testing, and validation  
+- **Isak Roos** – budgeting, hardware sketching and implementation, soldering, documentation, testing, and validation
 - **Olle Einvall** – quadcopter sketching, documentation, security considerations, exploration, investments, and testing
 - **Hugo Persson** – hardware preparation, video documentation, and testing
 
@@ -42,7 +42,6 @@ arduino_rx_drone_control/
     imu_deadzone_tester/      IMU deadzone measurement
     motor_assigner/           Motor order verification
 
-mobile_app_2_raspberry/       Mobile app (BLE)
 raspberry_2_arduino/          Raspberry Pi LoRa bridge
 
 cad/                          CAD files for the quadcopter airframe
@@ -73,6 +72,7 @@ The Arduino (ATmega328P in our case) receives LoRa packets, parses control input
 The flight controller implements a communication failsafe based on LoRa packet reception.
 
 If no valid packet is received for **1000 ms**, failsafe is triggered:
+
 - All ESCs are immediately set to **1000 µs**
 - PID computations are skipped
 - Motors remain at minimum throttle until communication resumes
@@ -97,8 +97,9 @@ To guarantee full motor cutoff, the communication failsafe must be triggered or 
 ## Airframe CAD Model
 
 The quadcopter airframe was custom-designed in Fusion 360 and is included in this repository as a single STL file:
+
 - `cad/drone_frame.stl`
-![Quadcopter CAD design](images/drone_frame.png)
+  ![Quadcopter CAD design](images/drone_frame.png)
 
 It represents the physical prototype used for testing.
 
@@ -118,6 +119,7 @@ This project depends on the RadioHead library, which is installed separately in 
 During development, I made local modifications to RadioHead.
 
 Local changes made:
+
 - The file `RH_ASK.cpp` was disabled (renamed to `RH_ASK.cpp.disabled`) to avoid conflicts with the LoRa module.
 - Atomic sections (`ATOMIC_BLOCK_START` / `ATOMIC_BLOCK_END`) were removed in `RHSPIDriver.cpp` to prevent blocking behavior that interfered with motor timing.
 
@@ -125,7 +127,7 @@ These changes were required to ensure stable real-time motor control. Without th
 
 ### Mobile App Notes
 
-The mobile app is provided as Flutter source code (`mobile_app_2_raspberry/lib/main.dart`) together with dependency definitions. Platform-specific files can be generated using `flutter create`.
+The mobile app has its own repository: [PidraQ](https://github.com/hannesgook/pidraq)
 
 ### Possible Next Steps
 

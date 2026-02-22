@@ -4,7 +4,6 @@
 #include <Servo.h>
 #include <SPI.h>
 #include <RH_RF95.h>
-#include <ArduinoJson.h>
 #include <Wire.h>
 #include <MadgwickAHRS.h>
 
@@ -91,7 +90,7 @@ static const float STICK_MAX_ANGLE_DEG = 15.0f;
 static const float STICK_MAX_YAW_RATE_DPS = 120.0f;
 
 // Angle loop gains (outer loop)
-static const float ANGLE_KP = 2.0f;
+float angleKP = 2.0f;
 static const float ANGLE_I_DEADZONE = 0.62f;  // Don't accumulate I-term for errors below this constant
 float rollAngleITerm = 0.0f;
 float pitchAngleITerm = 0.0f;
@@ -111,6 +110,14 @@ static const float ACC_MIN_G = 0.5f;
 static const float ACC_MAX_G = 1.8f;
 static const unsigned long IMU_FAIL_TIMEOUT_MS = 100;
 
+static const float STICK_MAX_YAW_ANGLE_DEG = 180.0f;   // stickYaw -1..1 maps to -180..180 deg target heading
+static const float YAW_ANGLE_KP = 4.0f;                // outer yaw angle -> target yaw rate
+static const float YAW_ANGLE_I_DEADZONE = 1.0f;        // deg
+float yawAngleITerm = 0.0f;
+
+float yawArmRef = 0.0f;
+
+
 float constrainf(float x, float a, float b) {
   if (x < a) return a;
   if (x > b) return b;
@@ -129,6 +136,12 @@ int throttleFromY(float y) {
   int us = 1000 + (int)(y * (maxThrottle - 1000));
   if (us > maxThrottle) us = maxThrottle;
   return us;
+}
+
+float wrapAngleDeg(float a) {
+  while (a > 180.0f) a -= 360.0f;
+  while (a < -180.0f) a += 360.0f;
+  return a;
 }
 
 typedef struct PID {
@@ -245,9 +258,8 @@ void updateIMU() {
 
   float accMag = sqrtf(ax * ax + ay * ay + az * az);
 
-  if (accMag < ACC_MIN_G || accMag > ACC_MAX_G) {
-    return;
-  }
+  if (!isfinite(accMag) || accMag < 0.1f) return;
+
 
   float gxRaw = (gxr - gyroBiasX) / 131.0f;
   float gyRaw = (gyr - gyroBiasY) / 131.0f;
@@ -305,10 +317,29 @@ void stopMotorsAndReset() {
   pidReset(yawRatePID);
   rollAngleITerm = 0.0f;
   pitchAngleITerm = 0.0f;
+  yawAngleITerm = 0.0f;
 }
 
-uint8_t buf[96];
-static StaticJsonDocument<JSON_OBJECT_SIZE(12) + 96> loraDoc;
+
+uint8_t buf[64];
+
+static inline float u8_to_01(uint8_t b) {
+  return (float)b * (1.0f / 255.0f);
+}
+
+// Matches Flutter _map11 approx. Tiny quantization error is normal.
+static inline float u8_to_m11(uint8_t b) {
+  return ((float)b * (1.0f / 127.5f)) - 1.0f;
+}
+
+static inline float read_f32_le(const uint8_t* p) {
+  union { uint8_t b[4]; float f; } u;
+  u.b[0] = p[0];
+  u.b[1] = p[1];
+  u.b[2] = p[2];
+  u.b[3] = p[3];
+  return u.f;
+}
 
 void handleLoRa() {
   rf95.poll();
@@ -316,51 +347,52 @@ void handleLoRa() {
 
   if (!rf95.available()) return;
   if (!rf95.recv(buf, &len)) return;
+  if (len < 1) return;
 
-  loraDoc.clear();
-  DeserializationError err = deserializeJson(loraDoc, buf, len);
-  if (err) return;
+  const uint8_t type = buf[0];
 
-  stickThrottle = loraDoc["t"] | 0.0f;
-  stickRoll     = loraDoc["x"] | 0.0f;
-  stickPitch    = loraDoc["y"] | 0.0f;
-  stickYaw      = loraDoc["r"] | 0.0f;
+  if (type != 'S') return;
+  if (len < 33) return;
+  
+  stickThrottle = u8_to_01(buf[1]);
+  stickRoll     = u8_to_m11(buf[2]);
+  stickPitch    = u8_to_m11(buf[3]);
+  stickYaw      = u8_to_m11(buf[4]);
 
   stickThrottle = constrainf(stickThrottle, 0.0f, 1.0f);
   stickRoll     = constrainf(stickRoll, -1.0f, 1.0f);
   stickPitch    = constrainf(stickPitch, -1.0f, 1.0f);
   stickYaw      = constrainf(stickYaw, -1.0f, 1.0f);
 
-  float p   = loraDoc["p"]  | 0.05f;
-  float aki = loraDoc["i"]  | 0.0f;
-  float d   = loraDoc["d"]  | 0.0f;
-  
-  d/=10;
+  const float p   = read_f32_le(buf + 5);
+  const float i   = read_f32_le(buf + 9);
+  const float d   = read_f32_le(buf + 13);
 
-  float p2 = loraDoc["p2"] | 1.0f;
-  float i2 = loraDoc["i2"] | 0.05f;
-  float d2 = loraDoc["d2"] | 0.0f;
-  p2*=2;
-  i2/=10;
+  const float p2  = read_f32_le(buf + 17);
+  const float i2  = read_f32_le(buf + 21);
+  const float d2  = read_f32_le(buf + 25);
 
-  aki *= 2;
+  const float angleKP_recv = read_f32_le(buf + 29);
 
-  rollRatePID.kp = p;
-  rollRatePID.ki = 0.0f;
-  rollRatePID.kd = d;
+  rollRatePID.kp  = p;
+  rollRatePID.ki  = 0.0f;
+  rollRatePID.kd  = d;
 
   pitchRatePID.kp = p;
   pitchRatePID.ki = 0.0f;
   pitchRatePID.kd = d;
 
-  yawRatePID.kp = p2;
-  yawRatePID.ki = i2;
-  yawRatePID.kd = d2;
+  yawRatePID.kp   = p2;
+  yawRatePID.ki   = i2;
+  yawRatePID.kd   = d2;
 
-  angleKI = aki;
+  angleKI = i;
+
+  angleKP = angleKP_recv;
 
   lastLoRaMs = millis();
 }
+
 
 void updateStabilization() {
   if ((millis() - lastImuOkMs) > IMU_FAIL_TIMEOUT_MS) {
@@ -388,12 +420,14 @@ void updateStabilization() {
     if (throttleUs < IDLE_CUTOFF_US) {
       rollArmRef = rollDeg;
       pitchArmRef = pitchDeg;
+      yawArmRef = yawDeg;
       armed = true;
     } else {
       stopMotorsAndReset();
       return;
     }
   }
+
 
   float targetRollDeg  = stickRoll  * STICK_MAX_ANGLE_DEG;
   float targetPitchDeg = -stickPitch * STICK_MAX_ANGLE_DEG;
@@ -416,13 +450,22 @@ void updateStabilization() {
     pitchAngleITerm = 0.0f;
   }
 
-  float targetRollRateDps  = ANGLE_KP * rollErrDeg + rollAngleITerm;
-  float targetPitchRateDps = ANGLE_KP * pitchErrDeg + pitchAngleITerm;
-  float targetYawRateDps   = stickYaw * STICK_MAX_YAW_RATE_DPS;
+  float targetRollRateDps  = angleKP * rollErrDeg + rollAngleITerm;
+  float targetPitchRateDps = angleKP * pitchErrDeg + pitchAngleITerm;
+  float yawMeasDeg = wrapAngleDeg(yawDeg - yawArmRef);
 
+  float targetYawDeg = stickYaw * 180.0f; // stick -1..1 -> -180..180 relative to arming heading
+
+  float yawErrDeg = wrapAngleDeg(targetYawDeg - yawMeasDeg);
+
+  static const float YAW_ANGLE_KP_LOCAL = 3.0f; // start 2-6
+  float targetYawRateDps = YAW_ANGLE_KP_LOCAL * yawErrDeg;
+
+  targetYawRateDps = constrainf(targetYawRateDps, -STICK_MAX_YAW_RATE_DPS, STICK_MAX_YAW_RATE_DPS);
+
+  float yawOut = -pidRate(yawRatePID, targetYawRateDps, gz_dps, lastDt);
   float rollOut  = -pidRate(rollRatePID,  targetRollRateDps,  gx_dps, lastDt);
   float pitchOut = pidRate(pitchRatePID, targetPitchRateDps, gy_dps, lastDt);
-  float yawOut   = pidRate(yawRatePID,   targetYawRateDps,   gz_dps, lastDt);
 
   int fl = throttleUs + (int)pitchOut - (int)rollOut + (int)yawOut;
   int fr = throttleUs + (int)pitchOut + (int)rollOut - (int)yawOut;
@@ -491,7 +534,7 @@ void setup() {
   stickPitch = 0.0f;
   stickYaw = 0.0f;
 
-  Serial.println("Setup finished");
+  //Serial.println("Setup finished");
 }
 
 void loop() {
