@@ -5,7 +5,7 @@ The system implements a complete communication chain for controlling a quadcopte
 
 The entire system is built from scratch without relying on existing flight control frameworks. Standard libraries were used where appropriate, and in one case modified at the source level to meet real-time control requirements.
 
-**Our project has qualified for the Unga Forskare semi-final exhibition (February 27, 2026 - Lund), the Swedish national science and research competition for young people**
+:medal_sports: **Qualified for the national final of Unga Forskare - Sweden's national science competition for young researchers**
 
 ![Full system setup](images/full_system_setup.jpg)
 
