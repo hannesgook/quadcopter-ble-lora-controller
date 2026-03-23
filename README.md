@@ -1,3 +1,5 @@
+> ⚠️ **This project has been replaced.** See [PidraQRL](https://github.com/hannesgook/PidraQRL) for the current version, rebuilt on ESP32 with a live SAC RL agent, new comms stack, Unity digital twin, and more.
+
 # Drone Control System
 
 This repository contains all code developed for our Swedish upper-secondary _Gymnasiearbete_ project.  
